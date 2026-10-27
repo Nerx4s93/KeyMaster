@@ -1,6 +1,6 @@
 ﻿namespace KeyMaster.Models.API;
 
 public sealed record UpdateApiKeyRequest(
-    string Name,
+    string? Name,
     string? Description,
-    string Key);
+    string? Key);

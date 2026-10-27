@@ -136,21 +136,31 @@ public class ApiKeysController : ControllerBase
         UpdateApiKeyRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            return BadRequest("Имя ключа обязательно.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Key))
-        {
-            return BadRequest("API-ключ обязателен.");
-        }
-
         var userId = GetUserId();
 
         if (userId is null)
         {
             return Unauthorized();
+        }
+
+        if (request.Name is null &&
+            request.Description is null &&
+            request.Key is null)
+        {
+            return BadRequest(
+                "Передайте хотя бы одно поле: name, description или key.");
+        }
+
+        if (request.Name is not null &&
+            string.IsNullOrWhiteSpace(request.Name))
+        {
+            return BadRequest("Имя ключа не может быть пустым.");
+        }
+
+        if (request.Key is not null &&
+            string.IsNullOrWhiteSpace(request.Key))
+        {
+            return BadRequest("API-ключ не может быть пустым.");
         }
 
         var apiKey = await _db.Keys
@@ -165,10 +175,20 @@ public class ApiKeysController : ControllerBase
             return NotFound("Ключ не найден.");
         }
 
-        apiKey.Name = request.Name.Trim();
-        apiKey.Description =
-            request.Description?.Trim() ?? string.Empty;
-        apiKey.Key = _encryptor.Encrypt(request.Key.Trim());
+        if (request.Name is not null)
+        {
+            apiKey.Name = request.Name.Trim();
+        }
+
+        if (request.Description is not null)
+        {
+            apiKey.Description = request.Description.Trim();
+        }
+
+        if (request.Key is not null)
+        {
+            apiKey.Key = _encryptor.Encrypt(request.Key.Trim());
+        }
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -176,7 +196,7 @@ public class ApiKeysController : ControllerBase
             apiKey.Id,
             apiKey.Name,
             apiKey.Description,
-            request.Key.Trim()));
+            _encryptor.Decrypt(apiKey.Key)));
     }
 
     [HttpDelete("{id:int}")]
