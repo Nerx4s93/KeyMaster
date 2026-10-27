@@ -1,5 +1,6 @@
 ﻿using KeyMaster.Models;
 using KeyMaster.Models.API;
+using KeyMaster.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,14 @@ namespace KeyMaster.Controllers;
 public class ApiKeysController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IApiKeyEncryptor _encryptor;
 
-    public ApiKeysController(AppDbContext db)
+    public ApiKeysController(
+        AppDbContext db,
+        IApiKeyEncryptor encryptor)
     {
         _db = db;
+        _encryptor = encryptor;
     }
 
     [HttpPost("create")]
@@ -45,7 +50,7 @@ public class ApiKeysController : ControllerBase
         {
             Name = request.Name.Trim(),
             Description = request.Description?.Trim() ?? string.Empty,
-            Key = request.Key.Trim(),
+            Key = _encryptor.Encrypt(request.Key.Trim()),
             UserId = userId.Value
         };
 
@@ -57,7 +62,7 @@ public class ApiKeysController : ControllerBase
             apiKey.Id,
             apiKey.Name,
             apiKey.Description,
-            apiKey.Key);
+            request.Key.Trim());
 
         return CreatedAtAction(
             nameof(GetById),
@@ -80,14 +85,17 @@ public class ApiKeysController : ControllerBase
             .AsNoTracking()
             .Where(key => key.UserId == userId.Value)
             .OrderBy(key => key.Name)
+            .ToListAsync(cancellationToken);
+
+        var response = keys
             .Select(key => new ApiKeyResponse(
                 key.Id,
                 key.Name,
                 key.Description,
-                key.Key))
-            .ToListAsync(cancellationToken);
+                _encryptor.Decrypt(key.Key)))
+            .ToList();
 
-        return Ok(keys);
+        return Ok(response);
     }
 
     [HttpGet("{id:int}")]
@@ -104,22 +112,22 @@ public class ApiKeysController : ControllerBase
 
         var apiKey = await _db.Keys
             .AsNoTracking()
-            .Where(key =>
-                key.Id == id &&
-                key.UserId == userId.Value)
-            .Select(key => new ApiKeyResponse(
-                key.Id,
-                key.Name,
-                key.Description,
-                key.Key))
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleOrDefaultAsync(
+                key =>
+                    key.Id == id &&
+                    key.UserId == userId.Value,
+                cancellationToken);
 
         if (apiKey is null)
         {
             return NotFound("Ключ не найден.");
         }
 
-        return Ok(apiKey);
+        return Ok(new ApiKeyResponse(
+            apiKey.Id,
+            apiKey.Name,
+            apiKey.Description,
+            _encryptor.Decrypt(apiKey.Key)));
     }
 
     [HttpPatch("{id:int}")]
@@ -160,7 +168,7 @@ public class ApiKeysController : ControllerBase
         apiKey.Name = request.Name.Trim();
         apiKey.Description =
             request.Description?.Trim() ?? string.Empty;
-        apiKey.Key = request.Key.Trim();
+        apiKey.Key = _encryptor.Encrypt(request.Key.Trim());
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -168,7 +176,7 @@ public class ApiKeysController : ControllerBase
             apiKey.Id,
             apiKey.Name,
             apiKey.Description,
-            apiKey.Key));
+            request.Key.Trim()));
     }
 
     [HttpDelete("{id:int}")]

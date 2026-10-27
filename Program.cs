@@ -49,6 +49,12 @@ public class Program
 
         #endregion
 
+        #region encryption
+
+        builder.Services.AddSingleton<IApiKeyEncryptor, ApiKeyEncryptor>();
+
+        #endregion
+
         #region JWT
 
         var jwtSettings = builder.Configuration.GetSection("Jwt");

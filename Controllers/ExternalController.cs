@@ -1,4 +1,5 @@
 using KeyMaster.Models;
+using KeyMaster.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +10,14 @@ namespace KeyMaster.Controllers;
 public class ExternalController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IApiKeyEncryptor _encryptor;
 
-    public ExternalController(AppDbContext db)
+    public ExternalController(
+        AppDbContext db,
+        IApiKeyEncryptor encryptor)
     {
         _db = db;
+        _encryptor = encryptor;
     }
 
     [HttpGet("keys")]
@@ -29,16 +34,15 @@ public class ExternalController : ControllerBase
             .AsNoTracking()
             .Where(x => x.UserId == user.Id)
             .OrderBy(x => x.Name)
-            .Select(x => new
-            {
-                x.Id,
-                x.Name,
-                x.Description,
-                x.Key
-            })
             .ToListAsync();
 
-        return Ok(keys);
+        return Ok(keys.Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.Description,
+            Key = _encryptor.Decrypt(x.Key)
+        }));
     }
 
     [HttpGet("keys/{id:int}")]
@@ -53,22 +57,20 @@ public class ExternalController : ControllerBase
 
         var key = await _db.Keys
             .AsNoTracking()
-            .Where(x => x.Id == id && x.UserId == user.Id)
-            .Select(x => new
-            {
-                x.Id,
-                x.Name,
-                x.Description,
-                x.Key
-            })
-            .SingleOrDefaultAsync();
+            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == user.Id);
 
         if (key is null)
         {
             return NotFound("Ключ не найден.");
         }
 
-        return Ok(key);
+        return Ok(new
+        {
+            key.Id,
+            key.Name,
+            key.Description,
+            Key = _encryptor.Decrypt(key.Key)
+        });
     }
 
     private async Task<User?> GetUser()
