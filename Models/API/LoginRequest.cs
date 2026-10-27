@@ -1,5 +1,5 @@
 ﻿namespace KeyMaster.Models.API;
 
-public class LoginRequest
-{
-}
+public sealed record LoginRequest(
+    string Login,
+    string Password);

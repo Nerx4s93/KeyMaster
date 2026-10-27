@@ -33,7 +33,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     [HttpPost("register")]
     public async Task<ActionResult<MessageResponse>> Register(
-        Models.API.RegisterRequest request,
+        RegisterRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Login) ||
@@ -83,7 +83,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<TokenResponse>> Login(
-        Models.API.LoginRequest request,
+        LoginRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Login) ||
@@ -149,7 +149,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult<TokenResponse>> Refresh(
-        Models.API.RefreshRequest request,
+        RefreshRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
