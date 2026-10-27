@@ -133,7 +133,9 @@ public class AuthController : ControllerBase
             TokenHash = HashToken(refreshTokenValue),
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(
-                RefreshTokenLifetimeDays)
+                RefreshTokenLifetimeDays),
+            AccessTokenJti = accessToken.Jti,
+            AccessTokenExpiresAt = accessToken.ExpiresAt
         };
 
         _db.RefreshTokens.Add(refreshToken);
@@ -185,7 +187,13 @@ public class AuthController : ControllerBase
 
         refreshToken.RevokedAt = DateTime.UtcNow;
 
+        await RevokeAccessTokenAsync(
+            refreshToken.AccessTokenJti,
+            refreshToken.AccessTokenExpiresAt,
+            cancellationToken);
+
         var newRefreshTokenValue = GenerateRefreshToken();
+        var accessToken = CreateAccessToken(user);
 
         var newRefreshToken = new RefreshToken
         {
@@ -193,12 +201,14 @@ public class AuthController : ControllerBase
             TokenHash = HashToken(newRefreshTokenValue),
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(
-                RefreshTokenLifetimeDays)
+                RefreshTokenLifetimeDays),
+            AccessTokenJti = accessToken.Jti,
+            AccessTokenExpiresAt = accessToken.ExpiresAt
         };
 
         _db.RefreshTokens.Add(newRefreshToken);
 
-        var accessToken = CreateAccessToken(user);
+        await CleanupRevokedTokensAsync(cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -227,10 +237,19 @@ public class AuthController : ControllerBase
                 x => x.TokenHash == tokenHash,
                 cancellationToken);
 
-        if (refreshToken is not null &&
-            refreshToken.RevokedAt is null)
+        if (refreshToken is not null)
         {
-            refreshToken.RevokedAt = DateTime.UtcNow;
+            if (refreshToken.RevokedAt is null)
+            {
+                refreshToken.RevokedAt = DateTime.UtcNow;
+            }
+
+            await RevokeAccessTokenAsync(
+                refreshToken.AccessTokenJti,
+                refreshToken.AccessTokenExpiresAt,
+                cancellationToken);
+
+            await CleanupRevokedTokensAsync(cancellationToken);
 
             await _db.SaveChangesAsync(cancellationToken);
         }
@@ -270,6 +289,8 @@ public class AuthController : ControllerBase
         var expiresAt = DateTime.UtcNow.AddMinutes(
             expiresMinutes);
 
+        var jti = Guid.NewGuid().ToString("N");
+
         var claims = new[]
         {
             new Claim(
@@ -278,7 +299,11 @@ public class AuthController : ControllerBase
 
             new Claim(
                 ClaimTypes.Name,
-                user.Login)
+                user.Login),
+
+            new Claim(
+                JwtRegisteredClaimNames.Jti,
+                jti)
         };
 
         var securityKey = new SymmetricSecurityKey(
@@ -300,7 +325,49 @@ public class AuthController : ControllerBase
 
         return new TokenResult(
             Token: token,
-            ExpiresAt: expiresAt);
+            ExpiresAt: expiresAt,
+            Jti: jti);
+    }
+
+    private async Task RevokeAccessTokenAsync(
+        string? jti,
+        DateTime? expiresAt,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jti))
+        {
+            return;
+        }
+
+        var isAlreadyRevoked = await _db.RevokedAccessTokens
+            .AnyAsync(x => x.Jti == jti, cancellationToken);
+
+        if (isAlreadyRevoked)
+        {
+            return;
+        }
+
+        _db.RevokedAccessTokens.Add(new RevokedAccessToken
+        {
+            Jti = jti,
+            ExpiresAt = expiresAt ?? DateTime.UtcNow.AddHours(1),
+            RevokedAt = DateTime.UtcNow
+        });
+    }
+
+    private async Task CleanupRevokedTokensAsync(
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+
+        var expiredTokens = await _db.RevokedAccessTokens
+            .Where(x => x.ExpiresAt <= now)
+            .ToListAsync(cancellationToken);
+
+        if (expiredTokens.Count > 0)
+        {
+            _db.RevokedAccessTokens.RemoveRange(expiredTokens);
+        }
     }
 
     private static string GenerateRefreshToken()
@@ -319,5 +386,6 @@ public class AuthController : ControllerBase
 
     private sealed record TokenResult(
         string Token,
-        DateTime ExpiresAt);
+        DateTime ExpiresAt,
+        string Jti);
 }

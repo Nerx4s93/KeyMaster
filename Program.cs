@@ -4,6 +4,7 @@ using KeyMaster.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 
 namespace KeyMaster;
@@ -87,6 +88,35 @@ public class Program
                         IssuerSigningKey =
                             new SymmetricSecurityKey(secretKey)
                     };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        var jti = context.Principal?
+                            .FindFirst(JwtRegisteredClaimNames.Jti)
+                            ?.Value;
+
+                        if (string.IsNullOrWhiteSpace(jti))
+                        {
+                            context.Fail(
+                                "В токене отсутствует идентификатор.");
+                            return;
+                        }
+
+                        var db = context.HttpContext.RequestServices
+                            .GetRequiredService<AppDbContext>();
+
+                        var isRevoked = await db.RevokedAccessTokens
+                            .AsNoTracking()
+                            .AnyAsync(x => x.Jti == jti);
+
+                        if (isRevoked)
+                        {
+                            context.Fail("Токен отозван.");
+                        }
+                    }
+                };
             });
 
         builder.Services.AddAuthorization();

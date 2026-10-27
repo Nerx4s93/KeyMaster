@@ -45,7 +45,7 @@ public class UserController : ControllerBase
             user.IsVerified));
     }
 
-    [HttpPut("me/name")]
+    [HttpPatch("me/name")]
     public async Task<IActionResult> UpdateName(UpdateNameRequest request)
     {
         var user = await FindUser();

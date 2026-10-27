@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
     public DbSet<APIKey> Keys { get; set; } = null!;
     public DbSet<VerificationCode> VerificationCodes { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<RevokedAccessToken> RevokedAccessTokens => Set<RevokedAccessToken>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -35,5 +36,12 @@ public class AppDbContext : DbContext
             .WithMany(x => x.RefreshTokens)
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RevokedAccessToken>()
+            .HasIndex(x => x.Jti)
+            .IsUnique();
+
+        modelBuilder.Entity<RevokedAccessToken>()
+            .HasIndex(x => x.ExpiresAt);
     }
 }

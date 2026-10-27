@@ -51,6 +51,12 @@ namespace KeyMaster.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("AccessTokenExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccessTokenJti")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -72,6 +78,32 @@ namespace KeyMaster.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
+                });
+
+            modelBuilder.Entity("KeyMaster.Models.RevokedAccessToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Jti")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("Jti")
+                        .IsUnique();
+
+                    b.ToTable("RevokedAccessTokens");
                 });
 
             modelBuilder.Entity("KeyMaster.Models.User", b =>
