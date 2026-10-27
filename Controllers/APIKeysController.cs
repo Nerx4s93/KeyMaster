@@ -71,7 +71,7 @@ public class ApiKeysController : ControllerBase
     }
 
     [HttpGet("get-all")]
-    public async Task<ActionResult<IReadOnlyList<ApiKeyResponse>>> GetAll(
+    public async Task<ActionResult<IReadOnlyList<ApiKeyListItemResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
         var userId = GetUserId();
@@ -85,17 +85,13 @@ public class ApiKeysController : ControllerBase
             .AsNoTracking()
             .Where(key => key.UserId == userId.Value)
             .OrderBy(key => key.Name)
-            .ToListAsync(cancellationToken);
-
-        var response = keys
-            .Select(key => new ApiKeyResponse(
+            .Select(key => new ApiKeyListItemResponse(
                 key.Id,
                 key.Name,
-                key.Description,
-                _encryptor.Decrypt(key.Key)))
-            .ToList();
+                key.Description))
+            .ToListAsync(cancellationToken);
 
-        return Ok(response);
+        return Ok(keys);
     }
 
     [HttpGet("{id:int}")]
