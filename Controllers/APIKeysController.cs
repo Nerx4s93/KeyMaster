@@ -19,7 +19,7 @@ public class ApiKeysController : ControllerBase
         _db = db;
     }
 
-    [HttpPost]
+    [HttpPost("create")]
     public async Task<ActionResult<ApiKeyResponse>> Create(
         CreateApiKeyRequest request,
         CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ public class ApiKeysController : ControllerBase
             response);
     }
 
-    [HttpGet]
+    [HttpGet("get-all")]
     public async Task<ActionResult<IReadOnlyList<ApiKeyResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
@@ -122,7 +122,7 @@ public class ApiKeysController : ControllerBase
         return Ok(apiKey);
     }
 
-    [HttpPut("{id:int}")]
+    [HttpPatch("{id:int}")]
     public async Task<ActionResult<ApiKeyResponse>> Update(
         int id,
         UpdateApiKeyRequest request,
