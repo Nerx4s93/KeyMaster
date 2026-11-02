@@ -10,7 +10,7 @@ public sealed class User
 
     public string? CentralApiKeyHash { get; set; }
 
-    public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
+    public ICollection<UserSession> UserSessions { get; set; } = [];
     public ICollection<APIKey> APIKeys { get; set; } = [];
     public ICollection<VerificationCode> VerificationCodes { get; set; } = [];
 }

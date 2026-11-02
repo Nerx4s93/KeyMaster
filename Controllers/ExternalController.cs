@@ -75,22 +75,7 @@ public class ExternalController : ControllerBase
 
     private async Task<User?> GetUser()
     {
-        var rawMasterKey = Request.Headers["X-Master-Key"].FirstOrDefault()
-            ?? Request.Headers["Master-Key"].FirstOrDefault()
-            ?? Request.Headers["X-API-Key"].FirstOrDefault()
-            ?? Request.Headers["Api-Key"].FirstOrDefault()
-            ?? Request.Query["masterKey"].FirstOrDefault();
-
-        if (string.IsNullOrWhiteSpace(rawMasterKey))
-        {
-            var authorization = Request.Headers.Authorization.FirstOrDefault();
-
-            if (!string.IsNullOrWhiteSpace(authorization) &&
-                authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                rawMasterKey = authorization[7..];
-            }
-        }
+        var rawMasterKey = Request.Headers["X-Master-Key"].FirstOrDefault();
 
         if (string.IsNullOrWhiteSpace(rawMasterKey))
         {

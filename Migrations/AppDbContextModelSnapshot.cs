@@ -45,67 +45,6 @@ namespace KeyMaster.Migrations
                     b.ToTable("Keys");
                 });
 
-            modelBuilder.Entity("KeyMaster.Models.RefreshToken", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("AccessTokenExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AccessTokenJti")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("RefreshTokens");
-                });
-
-            modelBuilder.Entity("KeyMaster.Models.RevokedAccessToken", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Jti")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("RevokedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExpiresAt");
-
-                    b.HasIndex("Jti")
-                        .IsUnique();
-
-                    b.ToTable("RevokedAccessTokens");
-                });
-
             modelBuilder.Entity("KeyMaster.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -136,6 +75,32 @@ namespace KeyMaster.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("KeyMaster.Models.UserSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSessions");
                 });
 
             modelBuilder.Entity("KeyMaster.Models.VerificationCode", b =>
@@ -175,10 +140,10 @@ namespace KeyMaster.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("KeyMaster.Models.RefreshToken", b =>
+            modelBuilder.Entity("KeyMaster.Models.UserSession", b =>
                 {
                     b.HasOne("KeyMaster.Models.User", "User")
-                        .WithMany("RefreshTokens")
+                        .WithMany("UserSessions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -201,7 +166,7 @@ namespace KeyMaster.Migrations
                 {
                     b.Navigation("APIKeys");
 
-                    b.Navigation("RefreshTokens");
+                    b.Navigation("UserSessions");
 
                     b.Navigation("VerificationCodes");
                 });

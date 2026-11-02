@@ -4,11 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace KeyMaster.Controllers;
 
@@ -16,18 +13,12 @@ namespace KeyMaster.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private const int RefreshTokenLifetimeDays = 30;
-
     private readonly AppDbContext _db;
-    private readonly IConfiguration _configuration;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public AuthController(
-        AppDbContext db,
-        IConfiguration configuration)
+    public AuthController(AppDbContext db)
     {
         _db = db;
-        _configuration = configuration;
     }
 
     [AllowAnonymous]
@@ -124,268 +115,55 @@ public class AuthController : ControllerBase
                 request.Password);
         }
 
-        var accessToken = CreateAccessToken(user);
-        var refreshTokenValue = GenerateRefreshToken();
+        var token = GenerateToken();
 
-        var refreshToken = new RefreshToken
+        var session = new UserSession
         {
             UserId = user.Id,
-            TokenHash = HashToken(refreshTokenValue),
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(
-                RefreshTokenLifetimeDays),
-            AccessTokenJti = accessToken.Jti,
-            AccessTokenExpiresAt = accessToken.ExpiresAt
+            Token = token,
+            CreatedAt = DateTime.UtcNow
         };
 
-        _db.RefreshTokens.Add(refreshToken);
+        _db.UserSessions.Add(session);
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Ok(new TokenResponse(
-            AccessToken: accessToken.Token,
-            RefreshToken: refreshTokenValue,
-            ExpiresAt: accessToken.ExpiresAt));
+        return Ok(new TokenResponse(token));
     }
 
-    [AllowAnonymous]
-    [HttpPost("refresh")]
-    public async Task<ActionResult<TokenResponse>> Refresh(
-        RefreshRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
-        {
-            return Unauthorized("Refresh token отсутствует.");
-        }
-
-        var refreshTokenValue = request.RefreshToken.Trim();
-        var tokenHash = HashToken(refreshTokenValue);
-
-        var refreshToken = await _db.RefreshTokens
-            .SingleOrDefaultAsync(
-                x => x.TokenHash == tokenHash,
-                cancellationToken);
-
-        if (refreshToken is null ||
-            refreshToken.RevokedAt is not null ||
-            refreshToken.ExpiresAt <= DateTime.UtcNow)
-        {
-            return Unauthorized(
-                "Refresh token недействителен или просрочен.");
-        }
-
-        var user = await _db.Users
-            .SingleOrDefaultAsync(
-                x => x.Id == refreshToken.UserId,
-                cancellationToken);
-
-        if (user is null)
-        {
-            return Unauthorized("Пользователь не найден.");
-        }
-
-        refreshToken.RevokedAt = DateTime.UtcNow;
-
-        await RevokeAccessTokenAsync(
-            refreshToken.AccessTokenJti,
-            refreshToken.AccessTokenExpiresAt,
-            cancellationToken);
-
-        var newRefreshTokenValue = GenerateRefreshToken();
-        var accessToken = CreateAccessToken(user);
-
-        var newRefreshToken = new RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = HashToken(newRefreshTokenValue),
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(
-                RefreshTokenLifetimeDays),
-            AccessTokenJti = accessToken.Jti,
-            AccessTokenExpiresAt = accessToken.ExpiresAt
-        };
-
-        _db.RefreshTokens.Add(newRefreshToken);
-
-        await CleanupRevokedTokensAsync(cancellationToken);
-
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new TokenResponse(
-            AccessToken: accessToken.Token,
-            RefreshToken: newRefreshTokenValue,
-            ExpiresAt: accessToken.ExpiresAt));
-    }
-
-    [AllowAnonymous]
+    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(
-        LogoutRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        var token = User.FindFirstValue(
+            ClaimTypes.SerialNumber);
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return Unauthorized();
+        }
+
+        var session = await _db.UserSessions
+            .SingleOrDefaultAsync(
+                x => x.Token == token,
+                cancellationToken);
+
+        if (session is null)
         {
             return NoContent();
         }
 
-        var tokenHash = HashToken(
-            request.RefreshToken.Trim());
+        _db.UserSessions.Remove(session);
 
-        var refreshToken = await _db.RefreshTokens
-            .SingleOrDefaultAsync(
-                x => x.TokenHash == tokenHash,
-                cancellationToken);
-
-        if (refreshToken is not null)
-        {
-            if (refreshToken.RevokedAt is null)
-            {
-                refreshToken.RevokedAt = DateTime.UtcNow;
-            }
-
-            await RevokeAccessTokenAsync(
-                refreshToken.AccessTokenJti,
-                refreshToken.AccessTokenExpiresAt,
-                cancellationToken);
-
-            await CleanupRevokedTokensAsync(cancellationToken);
-
-            await _db.SaveChangesAsync(cancellationToken);
-        }
+        await _db.SaveChangesAsync(cancellationToken);
 
         return NoContent();
     }
 
-    private TokenResult CreateAccessToken(User user)
+    private static string GenerateToken()
     {
-        var jwtSettings = _configuration
-            .GetSection("Jwt");
-
-        var secretKey = jwtSettings["SecretKey"]
-            ?? throw new InvalidOperationException(
-                "Jwt:SecretKey is not configured.");
-
-        var issuer = jwtSettings["Issuer"]
-            ?? throw new InvalidOperationException(
-                "Jwt:Issuer is not configured.");
-
-        var audience = jwtSettings["Audience"]
-            ?? throw new InvalidOperationException(
-                "Jwt:Audience is not configured.");
-
-        var expiresMinutes = int.TryParse(
-            jwtSettings["ExpiresMinutes"],
-            out var minutes)
-            ? minutes
-            : 15;
-
-        if (expiresMinutes <= 0)
-        {
-            throw new InvalidOperationException(
-                "Jwt:ExpiresMinutes must be greater than zero.");
-        }
-
-        var expiresAt = DateTime.UtcNow.AddMinutes(
-            expiresMinutes);
-
-        var jti = Guid.NewGuid().ToString("N");
-
-        var claims = new[]
-        {
-            new Claim(
-                ClaimTypes.NameIdentifier,
-                user.Id.ToString()),
-
-            new Claim(
-                ClaimTypes.Name,
-                user.Login),
-
-            new Claim(
-                JwtRegisteredClaimNames.Jti,
-                jti)
-        };
-
-        var securityKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(secretKey));
-
-        var credentials = new SigningCredentials(
-            securityKey,
-            SecurityAlgorithms.HmacSha256);
-
-        var jwt = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            expires: expiresAt,
-            signingCredentials: credentials);
-
-        var token = new JwtSecurityTokenHandler()
-            .WriteToken(jwt);
-
-        return new TokenResult(
-            Token: token,
-            ExpiresAt: expiresAt,
-            Jti: jti);
-    }
-
-    private async Task RevokeAccessTokenAsync(
-        string? jti,
-        DateTime? expiresAt,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(jti))
-        {
-            return;
-        }
-
-        var isAlreadyRevoked = await _db.RevokedAccessTokens
-            .AnyAsync(x => x.Jti == jti, cancellationToken);
-
-        if (isAlreadyRevoked)
-        {
-            return;
-        }
-
-        _db.RevokedAccessTokens.Add(new RevokedAccessToken
-        {
-            Jti = jti,
-            ExpiresAt = expiresAt ?? DateTime.UtcNow.AddHours(1),
-            RevokedAt = DateTime.UtcNow
-        });
-    }
-
-    private async Task CleanupRevokedTokensAsync(
-        CancellationToken cancellationToken)
-    {
-        var now = DateTime.UtcNow;
-
-        var expiredTokens = await _db.RevokedAccessTokens
-            .Where(x => x.ExpiresAt <= now)
-            .ToListAsync(cancellationToken);
-
-        if (expiredTokens.Count > 0)
-        {
-            _db.RevokedAccessTokens.RemoveRange(expiredTokens);
-        }
-    }
-
-    private static string GenerateRefreshToken()
-    {
-        return Convert.ToBase64String(
-            RandomNumberGenerator.GetBytes(64));
-    }
-
-    private static string HashToken(string token)
-    {
-        var bytes = Encoding.UTF8.GetBytes(token);
-
         return Convert.ToHexString(
-            SHA256.HashData(bytes));
+            RandomNumberGenerator.GetBytes(32));
     }
-
-    private sealed record TokenResult(
-        string Token,
-        DateTime ExpiresAt,
-        string Jti);
 }

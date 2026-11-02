@@ -4,4 +4,4 @@ public sealed record UserResponse(
     int Id,
     string Login,
     string Email,
-    bool isVerified);   
+    bool isVerified);

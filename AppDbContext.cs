@@ -5,11 +5,10 @@ namespace KeyMaster;
 
 public class AppDbContext : DbContext
 {
-    public DbSet<User> Users { get; set; } = null!;
-    public DbSet<APIKey> Keys { get; set; } = null!;
-    public DbSet<VerificationCode> VerificationCodes { get; set; } = null!;
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
-    public DbSet<RevokedAccessToken> RevokedAccessTokens => Set<RevokedAccessToken>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<APIKey> Keys => Set<APIKey>();
+    public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -31,17 +30,14 @@ public class AppDbContext : DbContext
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<RefreshToken>()
+        modelBuilder.Entity<UserSession>()
             .HasOne(x => x.User)
-            .WithMany(x => x.RefreshTokens)
+            .WithMany(x => x.UserSessions)
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<RevokedAccessToken>()
-            .HasIndex(x => x.Jti)
+        modelBuilder.Entity<UserSession>()
+            .HasIndex(x => x.Token)
             .IsUnique();
-
-        modelBuilder.Entity<RevokedAccessToken>()
-            .HasIndex(x => x.ExpiresAt);
     }
 }

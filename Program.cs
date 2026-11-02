@@ -1,11 +1,8 @@
 using DotNetEnv;
 using KeyMaster.Options;
 using KeyMaster.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Text;
 
 namespace KeyMaster;
 
@@ -55,75 +52,13 @@ public class Program
 
         #endregion
 
-        #region JWT
-
-        var jwtSettings = builder.Configuration.GetSection("Jwt");
-
-        var secretKeyValue = jwtSettings["SecretKey"]
-            ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.");
-
-        var issuer = jwtSettings["Issuer"]
-            ?? throw new InvalidOperationException("Jwt:Issuer is not configured.");
-
-        var audience = jwtSettings["Audience"]
-            ?? throw new InvalidOperationException("Jwt:Audience is not configured.");
-
-        var secretKey = Encoding.UTF8.GetBytes(secretKeyValue);
+        #region authentication
 
         builder.Services
-            .AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme =
-                    JwtBearerDefaults.AuthenticationScheme;
-
-                options.DefaultChallengeScheme =
-                    JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters =
-                    new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-
-                        ValidIssuer = issuer,
-                        ValidAudience = audience,
-                        IssuerSigningKey =
-                            new SymmetricSecurityKey(secretKey)
-                    };
-
-                options.Events = new JwtBearerEvents
-                {
-                    OnTokenValidated = async context =>
-                    {
-                        var jti = context.Principal?
-                            .FindFirst(JwtRegisteredClaimNames.Jti)
-                            ?.Value;
-
-                        if (string.IsNullOrWhiteSpace(jti))
-                        {
-                            context.Fail(
-                                "В токене отсутствует идентификатор.");
-                            return;
-                        }
-
-                        var db = context.HttpContext.RequestServices
-                            .GetRequiredService<AppDbContext>();
-
-                        var isRevoked = await db.RevokedAccessTokens
-                            .AsNoTracking()
-                            .AnyAsync(x => x.Jti == jti);
-
-                        if (isRevoked)
-                        {
-                            context.Fail("Токен отозван.");
-                        }
-                    }
-                };
-            });
+            .AddAuthentication(TokenAuthenticationHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(
+                TokenAuthenticationHandler.SchemeName,
+                null);
 
         builder.Services.AddAuthorization();
         builder.Services.AddControllers();
