@@ -69,38 +69,15 @@ namespace KeyMaster.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SessionToken")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Login")
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("KeyMaster.Models.UserSession", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Token")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserSessions");
                 });
 
             modelBuilder.Entity("KeyMaster.Models.VerificationCode", b =>
@@ -140,17 +117,6 @@ namespace KeyMaster.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("KeyMaster.Models.UserSession", b =>
-                {
-                    b.HasOne("KeyMaster.Models.User", "User")
-                        .WithMany("UserSessions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("KeyMaster.Models.VerificationCode", b =>
                 {
                     b.HasOne("KeyMaster.Models.User", "User")
@@ -165,8 +131,6 @@ namespace KeyMaster.Migrations
             modelBuilder.Entity("KeyMaster.Models.User", b =>
                 {
                     b.Navigation("APIKeys");
-
-                    b.Navigation("UserSessions");
 
                     b.Navigation("VerificationCodes");
                 });

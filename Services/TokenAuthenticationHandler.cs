@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 
 namespace KeyMaster.Services;
@@ -10,6 +12,7 @@ public sealed class TokenAuthenticationHandler
     : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public const string SchemeName = "Token";
+    public const string UserIdHeaderName = "X-User-Id";
 
     private readonly AppDbContext _db;
 
@@ -25,38 +28,67 @@ public sealed class TokenAuthenticationHandler
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var token = Request.Headers.Authorization
+        var signature = Request.Headers.Authorization
             .FirstOrDefault()
             ?.Trim();
 
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(signature))
         {
             return AuthenticateResult.NoResult();
         }
 
-        var session = await _db.UserSessions
-            .AsNoTracking()
-            .Include(x => x.User)
-            .SingleOrDefaultAsync(x => x.Token == token);
+        var userIdValue = Request.Headers[UserIdHeaderName]
+            .FirstOrDefault()
+            ?.Trim();
 
-        if (session is null)
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            return AuthenticateResult.Fail(
+                "Не указан идентификатор пользователя.");
+        }
+
+        var user = await _db.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == userId);
+
+        if (user is null || user.SessionToken is null)
         {
             return AuthenticateResult.Fail("Токен недействителен.");
+        }
+
+        byte[] providedSignature;
+
+        try
+        {
+            providedSignature = Convert.FromHexString(signature);
+        }
+        catch (FormatException)
+        {
+            return AuthenticateResult.Fail("Некорректная подпись.");
+        }
+
+        var payload = await ReadPayloadAsync();
+
+        var expectedSignature = RequestSignature.Compute(
+            payload,
+            user.SessionToken);
+
+        if (!CryptographicOperations.FixedTimeEquals(
+                providedSignature,
+                expectedSignature))
+        {
+            return AuthenticateResult.Fail("Неверная подпись.");
         }
 
         var claims = new[]
         {
             new Claim(
                 ClaimTypes.NameIdentifier,
-                session.UserId.ToString()),
+                user.Id.ToString()),
 
             new Claim(
                 ClaimTypes.Name,
-                session.User.Login),
-
-            new Claim(
-                ClaimTypes.SerialNumber,
-                session.Token)
+                user.Login)
         };
 
         var identity = new ClaimsIdentity(
@@ -70,5 +102,39 @@ public sealed class TokenAuthenticationHandler
             SchemeName);
 
         return AuthenticateResult.Success(ticket);
+    }
+
+    private async Task<string> ReadPayloadAsync()
+    {
+        if (HttpMethods.IsPost(Request.Method) ||
+            HttpMethods.IsPut(Request.Method) ||
+            HttpMethods.IsPatch(Request.Method) ||
+            HttpMethods.IsDelete(Request.Method))
+        {
+            Request.EnableBuffering();
+
+            using var reader = new StreamReader(
+                Request.Body,
+                Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false,
+                bufferSize: 1024,
+                leaveOpen: true);
+
+            var body = await reader.ReadToEndAsync(
+                Context.RequestAborted);
+
+            Request.Body.Position = 0;
+
+            if (body.Length > 0)
+            {
+                return body;
+            }
+        }
+
+        var query = Request.QueryString.Value;
+
+        return string.IsNullOrEmpty(query)
+            ? string.Empty
+            : query.TrimStart('?');
     }
 }

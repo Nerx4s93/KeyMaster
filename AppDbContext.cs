@@ -8,7 +8,6 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<APIKey> Keys => Set<APIKey>();
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
-    public DbSet<UserSession> UserSessions => Set<UserSession>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -29,15 +28,5 @@ public class AppDbContext : DbContext
             .WithMany(x => x.VerificationCodes)
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<UserSession>()
-            .HasOne(x => x.User)
-            .WithMany(x => x.UserSessions)
-            .HasForeignKey(x => x.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<UserSession>()
-            .HasIndex(x => x.Token)
-            .IsUnique();
     }
 }

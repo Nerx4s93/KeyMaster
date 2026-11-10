@@ -117,18 +117,11 @@ public class AuthController : ControllerBase
 
         var token = GenerateToken();
 
-        var session = new UserSession
-        {
-            UserId = user.Id,
-            Token = token,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _db.UserSessions.Add(session);
+        user.SessionToken = token;
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Ok(new TokenResponse(token));
+        return Ok(new TokenResponse(token, user.Id));
     }
 
     [Authorize]
@@ -136,25 +129,25 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout(
         CancellationToken cancellationToken)
     {
-        var token = User.FindFirstValue(
-            ClaimTypes.SerialNumber);
+        var userIdValue = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
 
-        if (string.IsNullOrWhiteSpace(token))
+        if (!int.TryParse(userIdValue, out var userId))
         {
             return Unauthorized();
         }
 
-        var session = await _db.UserSessions
+        var user = await _db.Users
             .SingleOrDefaultAsync(
-                x => x.Token == token,
+                x => x.Id == userId,
                 cancellationToken);
 
-        if (session is null)
+        if (user is null || user.SessionToken is null)
         {
             return NoContent();
         }
 
-        _db.UserSessions.Remove(session);
+        user.SessionToken = null;
 
         await _db.SaveChangesAsync(cancellationToken);
 
