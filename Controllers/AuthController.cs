@@ -42,14 +42,11 @@ public class AuthController : ControllerBase
         var email = request.Email.Trim();
 
         var loginExists = await _db.Users
-            .AnyAsync(
-                x => x.Login == login,
-                cancellationToken);
+            .AnyAsync(x => x.Login == login, cancellationToken);
 
         if (loginExists)
         {
-            return Conflict(
-                "Пользователь с таким логином уже существует.");
+            return Conflict("Пользователь с таким логином уже существует.");
         }
 
         var user = new User
@@ -58,17 +55,13 @@ public class AuthController : ControllerBase
             Email = email,
             IsVerified = false
         };
-
-        user.PasswordHash = _passwordHasher.HashPassword(
-            user,
-            request.Password);
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         _db.Users.Add(user);
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Ok(new MessageResponse(
-            "Пользователь зарегистрирован."));
+        return Ok(new MessageResponse("Пользователь зарегистрирован."));
     }
 
     [AllowAnonymous]
@@ -86,14 +79,11 @@ public class AuthController : ControllerBase
         var login = request.Login.Trim();
 
         var user = await _db.Users
-            .SingleOrDefaultAsync(
-                x => x.Login == login,
-                cancellationToken);
+            .SingleOrDefaultAsync(x => x.Login == login, cancellationToken);
 
         if (user is null)
         {
-            return Unauthorized(
-                "Неверный логин или пароль.");
+            return Unauthorized("Неверный логин или пароль.");
         }
 
         var passwordResult = _passwordHasher.VerifyHashedPassword(
@@ -103,16 +93,13 @@ public class AuthController : ControllerBase
 
         if (passwordResult == PasswordVerificationResult.Failed)
         {
-            return Unauthorized(
-                "Неверный логин или пароль.");
+            return Unauthorized("Неверный логин или пароль.");
         }
 
-        if (passwordResult ==
-            PasswordVerificationResult.SuccessRehashNeeded)
+        if (passwordResult == PasswordVerificationResult.SuccessRehashNeeded)
         {
             user.PasswordHash = _passwordHasher.HashPassword(
-                user,
-                request.Password);
+                user, request.Password);
         }
 
         var token = GenerateToken();
@@ -138,9 +125,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await _db.Users
-            .SingleOrDefaultAsync(
-                x => x.Id == userId,
-                cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken);
 
         if (user is null || user.SessionToken is null)
         {
@@ -156,7 +141,6 @@ public class AuthController : ControllerBase
 
     private static string GenerateToken()
     {
-        return Convert.ToHexString(
-            RandomNumberGenerator.GetBytes(32));
+        return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     }
 }
