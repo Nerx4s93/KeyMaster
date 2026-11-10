@@ -29,7 +29,7 @@ public sealed class TokenAuthenticationHandler
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var signature = Request.Headers.Authorization
-            .FirstOrDefault() ?.Trim();
+            .FirstOrDefault()?.Trim();
 
         if (string.IsNullOrWhiteSpace(signature))
         {
@@ -37,7 +37,7 @@ public sealed class TokenAuthenticationHandler
         }
 
         var userIdValue = Request.Headers[UserIdHeaderName]
-            .FirstOrDefault() ?.Trim();
+            .FirstOrDefault()?.Trim();
 
         if (!int.TryParse(userIdValue, out var userId))
         {
