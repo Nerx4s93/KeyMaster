@@ -5,8 +5,6 @@ namespace KeyMaster.Services;
 
 public static class RequestSignature
 {
-    // Canonical request string: METHOD\nPATH\nQUERY\nBODY
-    // METHOD is uppercase, QUERY is without the leading '?'.
     public static byte[] Compute(
         string method,
         string path,
