@@ -1,0 +1,17 @@
+services:
+  keymaster:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: keymaster:latest
+    container_name: keymaster
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - keymaster-data:/data
+
+volumes:
+  keymaster-data:

@@ -2,6 +2,7 @@
 
 # Этот этап используется при запуске из VS в быстром режиме (по умолчанию для конфигурации отладки)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+RUN mkdir -p /data && chown $APP_UID:$APP_UID /data
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
