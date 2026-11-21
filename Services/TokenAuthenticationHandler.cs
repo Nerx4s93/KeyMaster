@@ -64,10 +64,21 @@ public sealed class TokenAuthenticationHandler
             return AuthenticateResult.Fail("Некорректная подпись.");
         }
 
-        var payload = await ReadPayloadAsync();
+        var body = await ReadBodyAsync();
+
+        var path = Request.PathBase.Add(Request.Path).Value
+            ?? string.Empty;
+
+        var query = Request.QueryString.Value
+            ?.TrimStart('?')
+            ?? string.Empty;
 
         var expectedSignature = RequestSignature.Compute(
-            payload, user.SessionToken);
+            Request.Method,
+            path,
+            query,
+            body,
+            user.SessionToken);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 providedSignature,
@@ -100,37 +111,30 @@ public sealed class TokenAuthenticationHandler
         return AuthenticateResult.Success(ticket);
     }
 
-    private async Task<string> ReadPayloadAsync()
+    private async Task<string> ReadBodyAsync()
     {
-        if (HttpMethods.IsPost(Request.Method) ||
-            HttpMethods.IsPut(Request.Method) ||
-            HttpMethods.IsPatch(Request.Method) ||
-            HttpMethods.IsDelete(Request.Method))
+        if (!HttpMethods.IsPost(Request.Method) &&
+            !HttpMethods.IsPut(Request.Method) &&
+            !HttpMethods.IsPatch(Request.Method) &&
+            !HttpMethods.IsDelete(Request.Method))
         {
-            Request.EnableBuffering();
-
-            using var reader = new StreamReader(
-                Request.Body,
-                Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: false,
-                bufferSize: 1024,
-                leaveOpen: true);
-
-            var body = await reader.ReadToEndAsync(
-                Context.RequestAborted);
-
-            Request.Body.Position = 0;
-
-            if (body.Length > 0)
-            {
-                return body;
-            }
+            return string.Empty;
         }
 
-        var query = Request.QueryString.Value;
+        Request.EnableBuffering();
 
-        return string.IsNullOrEmpty(query)
-            ? string.Empty
-            : query.TrimStart('?');
+        using var reader = new StreamReader(
+            Request.Body,
+            Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: false,
+            bufferSize: 1024,
+            leaveOpen: true);
+
+        var body = await reader.ReadToEndAsync(
+            Context.RequestAborted);
+
+        Request.Body.Position = 0;
+
+        return body;
     }
 }
